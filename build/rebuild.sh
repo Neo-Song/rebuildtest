@@ -14,8 +14,7 @@ HASH_DIR="$PROJECT_DIR/.hash"
 
 # ===== 依赖配置 =====
 # 格式: "库名:依赖1,依赖2,..."
-# 例如: "b:a" 表示 libb 依赖 liba
-# 每个库一行，用分号隔开
+# 每个库一行，用换行隔开
 LIB_DEPS="
 a:
 b:a
@@ -272,19 +271,32 @@ show_status() {
     done
 }
 
-# Clean build
+# Clean build (keep rebuild.sh and this script itself)
 clean_build() {
     log_info "Cleaning build artifacts..."
-    rm -rf "$BUILD_DIR"/*
-    rm -rf "$LIBS_DIR"/*
-    rm -rf "$HASH_DIR"/*
+    
+    # Clean build directory (but keep rebuild.sh)
+    if [ -d "$BUILD_DIR" ]; then
+        find "$BUILD_DIR" -mindepth 1 -maxdepth 1 ! -name 'rebuild.sh' -exec rm -rf {} \; 2>/dev/null || true
+    fi
+    
+    # Clean libs
+    if [ -d "$LIBS_DIR" ]; then
+        rm -f "$LIBS_DIR"/*.a
+    fi
+    
+    # Clean hash
+    if [ -d "$HASH_DIR" ]; then
+        rm -f "$HASH_DIR"/*.hash
+    fi
+    
     log_info "Clean complete. Next build will be a full rebuild."
 }
 
 # Force rebuild
 force_rebuild() {
     log_info "Force rebuild triggered..."
-    rm -rf "$HASH_DIR"/*
+    rm -f "$HASH_DIR"/*.hash
     smart_build
 }
 
@@ -333,7 +345,7 @@ case "${1:-build}" in
         echo "Commands:"
         echo "  build   - Smart incremental build with dependency tracking"
         echo "  status  - Show library build status"
-        echo "  clean   - Clean build artifacts"
+        echo "  clean   - Clean build artifacts (keeps rebuild.sh)"
         echo "  rebuild - Force complete rebuild"
         echo "  run     - Build and run"
         echo "  deps    - Show dependency graph"
