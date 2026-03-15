@@ -1,13 +1,5 @@
-# Build artifacts (only in build directory)
-/build/*
-!/build/rebuild.sh
-
-# Build outputs in subdirectories
-build/*.o
-build/*.a
-build/*.so
-build/*.dylib
-build/main
+# Build artifacts in tar directory
+tar/
 
 # Hash cache
 .hash/
