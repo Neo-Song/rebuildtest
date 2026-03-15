@@ -13,3 +13,4 @@ const char* liba_version(void) {
     return "1.0.0";
 }
 // Modified for testing
+// Test change for dependency tracking

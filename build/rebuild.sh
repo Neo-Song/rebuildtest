@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# rebuild.sh - Smart incremental build script
-# 智能增量编译：检查源码变化，仅在需要时重新编译
+# rebuild.sh - Smart incremental build script with dependency support
+# 智能增量编译：支持库依赖链，自动检测被依赖库的变化
 
 set -e
 
@@ -11,6 +11,15 @@ CODE_DIR="$PROJECT_DIR/code"
 LIBS_DIR="$PROJECT_DIR/libs"
 BUILD_DIR="$PROJECT_DIR/build"
 HASH_DIR="$PROJECT_DIR/.hash"
+
+# ===== 依赖配置 =====
+# 格式: "库名:依赖1,依赖2,..."
+# 例如: "b:a" 表示 libb 依赖 liba
+# 每个库一行，用分号隔开
+LIB_DEPS="
+a:
+b:a
+"
 
 # Libraries to build (without lib prefix)
 LIBS=("a" "b")
@@ -25,12 +34,74 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Calculate hash of a library source directory
+# Get direct dependencies for a library
+get_direct_deps() {
+    local libname="$1"
+    local line
+    while IFS=':' read -r lib deps; do
+        if [ "$lib" = "$libname" ]; then
+            echo "$deps"
+            return
+        fi
+    done <<< "$LIB_DEPS"
+}
+
+# Get all dependencies (including transitive)
+get_all_deps() {
+    local libname="$1"
+    local result=""
+    local to_process="$libname"
+    local processed=""
+    
+    while [ -n "$to_process" ]; do
+        # Get first item
+        local current=$(echo "$to_process" | awk '{print $1; exit}')
+        # Remove first item
+        to_process=$(echo "$to_process" | awk '{$1=""; print $0}' | xargs)
+        
+        # Skip if already processed
+        if echo "$processed" | grep -qw "$current"; then
+            continue
+        fi
+        processed="$processed $current"
+        
+        # Get deps of current
+        local deps=$(get_direct_deps "$current")
+        if [ -n "$deps" ]; then
+            for dep in $(echo "$deps" | tr ',' ' '); do
+                if ! echo "$processed" | grep -qw "$dep"; then
+                    result="$result $dep"
+                    to_process="$to_process $dep"
+                fi
+            done
+        fi
+    done
+    
+    echo "$result" | xargs
+}
+
+# Calculate hash for a library including all dependencies
 calculate_lib_hash() {
     local libname="$1"
     local lib_dir="$CODE_DIR/lib${libname}"
+    local all_files=""
+    
+    # 1. Add this library's own source files
     if [ -d "$lib_dir" ]; then
-        find "$lib_dir" -type f \( -name "*.c" -o -name "*.h" \) -exec cat {} \; | shasum -a 256 | cut -d' ' -f1
+        all_files="$all_files $(find "$lib_dir" -type f \( -name '*.c' -o -name '*.h' \))"
+    fi
+    
+    # 2. Add all dependent libraries' source files (transitive)
+    local all_deps=$(get_all_deps "$libname")
+    for dep in $all_deps; do
+        local dep_dir="$CODE_DIR/lib${dep}"
+        if [ -d "$dep_dir" ]; then
+            all_files="$all_files $(find "$dep_dir" -type f \( -name '*.c' -o -name '*.h' \))"
+        fi
+    done
+    
+    if [ -n "$all_files" ]; then
+        echo "$all_files" | xargs cat | shasum -a 256 | cut -d' ' -f1
     else
         echo "dir_not_found"
     fi
@@ -63,12 +134,16 @@ check_needs_rebuild() {
     return 1  # No rebuild needed
 }
 
-# Save hash of library source
+# Save hash of library source (including dependencies)
 save_hash() {
     local libname="$1"
     local current_hash=$(calculate_lib_hash "$libname")
+    local deps=$(get_direct_deps "$libname")
+    if [ -z "$deps" ]; then
+        deps="none"
+    fi
     echo "$current_hash" > "$HASH_DIR/${libname}.hash"
-    log_info "Saved hash for $libname: ${current_hash:0:16}..."
+    log_info "Saved hash for lib${libname} (deps: $deps): ${current_hash:0:16}..."
 }
 
 # Build a single library
@@ -82,10 +157,22 @@ build_library() {
 
 # Main build function
 smart_build() {
-    log_info "=== Smart Incremental Build ==="
+    log_info "=== Smart Incremental Build with Dependencies ==="
     log_info "Project: rebuildtest"
     log_info "Code directory: $CODE_DIR"
     log_info "Libs directory: $LIBS_DIR"
+    echo ""
+    
+    # Show dependency graph
+    echo "Dependency graph:"
+    for libname in "${LIBS[@]}"; do
+        local deps=$(get_direct_deps "$libname")
+        if [ -n "$deps" ]; then
+            echo "  lib${libname} depends on: $deps"
+        else
+            echo "  lib${libname} (no dependencies)"
+        fi
+    done
     echo ""
     
     # Create directories if not exist
@@ -95,23 +182,39 @@ smart_build() {
     # Check if CMake needs to be reconfigured
     if [ ! -f "$BUILD_DIR/build.ninja" ]; then
         log_info "Configuring CMake..."
-        cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY="$LIBS_DIR" -DLIBRARY_OUTPUT_DIRECTORY="$LIBS_DIR" "$PROJECT_DIR" -B "$BUILD_DIR"
+        cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY="$LIBS_DIR" \
+            -DLIBRARY_OUTPUT_DIRECTORY="$LIBS_DIR" \
+            "$PROJECT_DIR" -B "$BUILD_DIR"
     fi
     
     local needs_main_rebuild=false
     
+    # Build in order: a first (no deps), then b (depends on a)
+    local sorted_libs=("a" "b")
+    
     # Check each library
-    for libname in "${LIBS[@]}"; do
+    for libname in "${sorted_libs[@]}"; do
         if check_needs_rebuild "$libname"; then
-            log_warn "$libname: Source changed or not built, rebuilding..."
+            local deps=$(get_direct_deps "$libname")
+            if [ -n "$deps" ]; then
+                log_warn "lib${libname}: Dependency changed or not built, rebuilding (deps: $deps)..."
+            else
+                log_warn "lib${libname}: Source changed or not built, rebuilding..."
+            fi
             build_library "$libname"
             needs_main_rebuild=true
         else
-            log_info "$libname: No changes detected, skipping (using cached)"
+            local deps=$(get_direct_deps "$libname")
+            if [ -n "$deps" ]; then
+                log_info "lib${libname} (deps: $deps): No changes detected, skipping"
+            else
+                log_info "lib${libname}: No changes detected, skipping"
+            fi
         fi
     done
     
-    # Check if main needs rebuild (if any lib was rebuilt or main is missing)
+    # Check if main needs rebuild
     if [ ! -f "$BUILD_DIR/main" ]; then
         needs_main_rebuild=true
     fi
@@ -129,20 +232,28 @@ smart_build() {
     log_info "Executable: $BUILD_DIR/main"
 }
 
-# Show status
+# Show status with dependency info
 show_status() {
     echo ""
-    echo "=== Library Status ==="
+    echo "=== Library Status (with dependencies) ==="
     for libname in "${LIBS[@]}"; do
         local lib_file="$LIBS_DIR/lib${libname}.a"
         local hash_file="$HASH_DIR/${libname}.hash"
+        local deps=$(get_direct_deps "$libname")
         
-        printf "%-10s: " "lib${libname}"
+        printf "lib%-8s " "$libname"
+        
+        # Show deps
+        if [ -n "$deps" ]; then
+            printf "[deps:%s] " "$deps"
+        else
+            printf "[no deps] "
+        fi
         
         if [ -f "$lib_file" ]; then
-            printf "compiled  "
+            printf "built  "
         else
-            printf "NOT built "
+            printf "NOT   "
         fi
         
         if [ -f "$hash_file" ]; then
@@ -200,15 +311,32 @@ case "${1:-build}" in
             exit 1
         fi
         ;;
+    deps)
+        echo "Dependency graph:"
+        for libname in "${LIBS[@]}"; do
+            local all_deps=$(get_all_deps "$libname")
+            local direct_deps=$(get_direct_deps "$libname")
+            if [ -z "$direct_deps" ]; then
+                direct_deps="none"
+            fi
+            if [ -z "$all_deps" ]; then
+                all_deps="none"
+            fi
+            echo "  lib${libname}:"
+            echo "    direct: $direct_deps"
+            echo "    transitive: $all_deps"
+        done
+        ;;
     *)
-        echo "Usage: $0 {build|status|clean|rebuild|run}"
+        echo "Usage: $0 {build|status|clean|rebuild|run|deps}"
         echo ""
         echo "Commands:"
-        echo "  build   - Smart incremental build (default)"
+        echo "  build   - Smart incremental build with dependency tracking"
         echo "  status  - Show library build status"
         echo "  clean   - Clean build artifacts"
         echo "  rebuild - Force complete rebuild"
         echo "  run     - Build and run"
+        echo "  deps    - Show dependency graph"
         exit 1
         ;;
 esac

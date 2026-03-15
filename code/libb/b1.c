@@ -7,6 +7,7 @@ void libb_print_name(void) {
 
 void libb_start(void) {
     printf("libb started\n");
+    liba_init();  // Use liba's initialization
 }
 
 int libb_get_id(void) {

@@ -12,7 +12,7 @@ set(LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/libs)
 include_directories(${CMAKE_SOURCE_DIR}/code/liba)
 include_directories(${CMAKE_SOURCE_DIR}/code/libb)
 
-# Build liba
+# Build liba (no dependencies)
 add_library(liba STATIC
     ${CMAKE_SOURCE_DIR}/code/liba/a1.c
     ${CMAKE_SOURCE_DIR}/code/liba/a2.c
@@ -20,16 +20,15 @@ add_library(liba STATIC
 )
 set_target_properties(liba PROPERTIES OUTPUT_NAME "a")
 
-# Build libb
+# Build libb (depends on liba)
 add_library(libb STATIC
     ${CMAKE_SOURCE_DIR}/code/libb/b1.c
     ${CMAKE_SOURCE_DIR}/code/libb/b2.c
     ${CMAKE_SOURCE_DIR}/code/libb/b3.c
 )
 set_target_properties(libb PROPERTIES OUTPUT_NAME "b")
+target_link_libraries(libb liba)  # libb depends on liba
 
-# Build main executable
+# Build main executable (depends on liba and libb)
 add_executable(main ${CMAKE_SOURCE_DIR}/code/main/main.c)
-
-# Link libraries
 target_link_libraries(main liba libb)
