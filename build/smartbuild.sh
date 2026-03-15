@@ -8,6 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 CMAKE_DIR="$SCRIPT_DIR/cmake"
+LIBS_DIR="$PROJECT_DIR/libs"
 TAR_DIR="$PROJECT_DIR/tar"
 TMP_DIR="$TAR_DIR/tmp"
 BUILD_DIR="$SCRIPT_DIR"
@@ -44,8 +45,10 @@ calculate_lib_hash() {
 # 检查库是否需要重新编译
 check_lib_needs_rebuild() {
     local libname="$1"
-    local lib_archive="$TAR_DIR/${libname}.a"
-    local hash_file="$PROJECT_DIR/.hash/${libname}.hash"
+    local lib_archive="$LIBS_DIR/${libname}.a"
+LIBS_DIR="$PROJECT_DIR/libs"
+    
+    local hash_file="$LIBS_DIR/${libname}.hash"
     
     # 库文件不存在，需要编译
     if [ ! -f "$lib_archive" ]; then
@@ -85,9 +88,9 @@ build_main() {
     # CMake 配置
     cmake -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY="$TAR_DIR" \
-        -DLIBRARY_OUTPUT_DIRECTORY="$TAR_DIR" \
-        -DRUNTIME_OUTPUT_DIRECTORY="$TAR_DIR" \
+        -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY="$LIBS_DIR" \
+        -DLIBRARY_OUTPUT_DIRECTORY="$LIBS_DIR" \
+        -DRUNTIME_OUTPUT_DIRECTORY="$LIBS_DIR" \
         -DPROJECT_ROOT="$PROJECT_DIR" \
         "$CMAKE_DIR" \
         -B "$TMP_DIR/main"
@@ -100,11 +103,11 @@ build_main() {
 smart_build() {
     log_info "=== Smart Build (Main Program) ==="
     log_info "Project: rebuildtest"
-    log_info "Output: $TAR_DIR"
+    log_info "Output: $LIBS_DIR"
     echo ""
     
     # 创建输出目录
-    mkdir -p "$TAR_DIR"
+    mkdir -p "$LIBS_DIR"
     mkdir -p "$TMP_DIR"
     
     local needs_rebuild=false
@@ -136,7 +139,7 @@ smart_build() {
         log_info "main already exists, checking if rebuild needed..."
         # 检查 main 是否需要重新编译（简单检查：比库文件新否）
         local main_time=$(stat -f "%m" "$TAR_DIR/main" 2>/dev/null || stat -c "%Y" "$TAR_DIR/main" 2>/dev/null)
-        local liba_time=$(stat -f "%m" "$TAR_DIR/liba.a" 2>/dev/null || stat -c "%Y" "$TAR_DIR/liba.a" 2>/dev/null)
+        local liba_time=$(stat -f "%m" "$LIBS_DIR/liba.a" 2>/dev/null || stat -c "%Y" "$LIBS_DIR/liba.a" 2>/dev/null)
         
         if [ "$main_time" -lt "$liba_time" 2>/dev/null ]; then
             log_info "main is older than libs, rebuilding..."
@@ -151,7 +154,7 @@ smart_build() {
     
     echo ""
     log_info "=== Build Complete ==="
-    log_info "Output directory: $TAR_DIR"
+    log_info "Output directory: $LIBS_DIR"
 }
 
 # 强制重建模式
@@ -159,7 +162,7 @@ force_rebuild() {
     log_info "Force rebuild mode..."
     
     # 清理 hash
-    rm -f "$PROJECT_DIR/.hash"/*.hash
+    rm -f "$LIBS_DIR"/*.hash
     
     # 重建所有库
     for libname in "${LIBS[@]}"; do
@@ -176,25 +179,23 @@ direct_build() {
     build_main
 }
 
-# Clean build artifacts
+# Clean build artifacts (only tmp in tar/, keep libraries and hashes)
 clean_build() {
     log_info "=== Clean Build Artifacts ==="
     
-    # Clean tmp build directories
+    # Clean tmp build directories only (keep libraries in libs/ and hashes)
     if [ -d "$TMP_DIR" ]; then
         rm -rf "$TMP_DIR"/*
         log_info "Cleaned: $TMP_DIR"
     fi
     
-    # Clean output files
-    rm -f "$TAR_DIR"/*.a "$TAR_DIR"/main
-    log_info "Cleaned: $TAR_DIR"
+    # Also clean main in tar/
+    if [ -f "$TAR_DIR/main" ]; then
+        rm -f "$TAR_DIR/main"
+        log_info "Cleaned: $TAR_DIR/main"
+    fi
     
-    # Clean hash files
-    rm -f "$PROJECT_DIR/.hash"/*.hash
-    log_info "Cleaned: $PROJECT_DIR/.hash"
-    
-    log_info "Clean complete."
+    log_info "Clean complete. (libs/ preserved)"
 }
 
 # Show usage

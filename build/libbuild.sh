@@ -9,9 +9,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 CMAKE_DIR="$SCRIPT_DIR/cmake"
+LIBS_DIR="$PROJECT_DIR/libs"
 TAR_DIR="$PROJECT_DIR/tar"
 TMP_DIR="$TAR_DIR/tmp"
-BUILD_DIR="$SCRIPT_DIR"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -45,15 +45,15 @@ esac
 
 log_info "=== Building $LIBNAME ==="
 log_info "Project: rebuildtest"
-log_info "Output: $TAR_DIR"
+log_info "Output: $LIBS_DIR"
 
 # 创建输出目录
-mkdir -p "$TAR_DIR"
+mkdir -p "$LIBS_DIR"
 mkdir -p "$TMP_DIR"
 
 # 检查是否需要重新编译
 NEED_BUILD=true
-LIB_ARCHIVE="$TAR_DIR/${LIBNAME}.a"
+LIB_ARCHIVE="$LIBS_DIR/${LIBNAME}.a"
 
 if [ -f "$LIB_ARCHIVE" ]; then
     # 计算包含依赖的 hash
@@ -67,7 +67,8 @@ if [ -f "$LIB_ARCHIVE" ]; then
     else
         LIB_HASH=$(find "$PROJECT_DIR/code/$LIBNAME" -name "*.c" -o -name "*.h" | sort | xargs cat | shasum -a 256 | cut -d' ' -f1)
     fi
-    HASH_FILE="$PROJECT_DIR/.hash/${LIBNAME}.hash"
+    
+    HASH_FILE="$LIBS_DIR/${LIBNAME}.hash"
     
     if [ -f "$HASH_FILE" ]; then
         SAVED_HASH=$(cat "$HASH_FILE")
@@ -88,8 +89,8 @@ if [ "$NEED_BUILD" = true ]; then
     # CMake 配置和编译
     cmake -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY="$TAR_DIR" \
-        -DLIBRARY_OUTPUT_DIRECTORY="$TAR_DIR" \
+        -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY="$LIBS_DIR" \
+        -DLIBRARY_OUTPUT_DIRECTORY="$LIBS_DIR" \
         -DPROJECT_ROOT="$PROJECT_DIR" \
         "$CMAKE_DIR" \
         -B "$TMP_DIR/${LIBNAME}"
@@ -107,8 +108,8 @@ if [ "$NEED_BUILD" = true ]; then
     else
         LIB_HASH=$(find "$PROJECT_DIR/code/$LIBNAME" -name "*.c" -o -name "*.h" | sort | xargs cat | shasum -a 256 | cut -d' ' -f1)
     fi
-    mkdir -p "$PROJECT_DIR/.hash"
-    echo "$LIB_HASH" > "$PROJECT_DIR/.hash/${LIBNAME}.hash"
+    mkdir -p "$LIBS_DIR"
+    echo "$LIB_HASH" > "$LIBS_DIR/${LIBNAME}.hash"
     
     log_info "$LIBNAME built successfully: $LIB_ARCHIVE"
 else
@@ -121,8 +122,8 @@ log_info "=== Build Complete ==="
 clean_lib() {
     log_info "=== Clean $LIBNAME ==="
     rm -rf "$TMP_DIR/${LIBNAME}"
-    rm -f "$TAR_DIR/${LIBNAME}.a"
-    rm -f "$PROJECT_DIR/.hash/${LIBNAME}.hash"
+    rm -f "$LIBS_DIR/${LIBNAME}.a"
+    rm -f "$LIBS_DIR/${LIBNAME}.hash"
     log_info "Clean complete."
 }
 

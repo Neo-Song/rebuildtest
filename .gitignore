@@ -1,8 +1,10 @@
-# Build artifacts in tar directory
+# Temporary build directory (ignored)
 tar/
 
-# Hash cache
-.hash/
+# Libraries and hashes (committed to GitHub for sharing)
+# libs/ contains:
+#   - liba.a, libb.a: compiled static libraries
+#   - liba.hash, libb.hash: source code hashes for incremental build
 
 # IDE
 .vscode/

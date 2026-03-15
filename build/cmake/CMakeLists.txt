@@ -12,9 +12,9 @@ endif()
 # 项目根目录
 set(PROJECT_ROOT $ENV{PROJECT_ROOT})
 
-# 输出目录
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_ROOT}/tar)
-set(LIBRARY_OUTPUT_DIRECTORY ${PROJECT_ROOT}/tar)
+# 输出目录 - libraries to libs/, executables to tar/
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_ROOT}/libs)
+set(LIBRARY_OUTPUT_DIRECTORY ${PROJECT_ROOT}/libs)
 set(RUNTIME_OUTPUT_DIRECTORY ${PROJECT_ROOT}/tar)
 
 # 包含各子目录的 CMake 配置

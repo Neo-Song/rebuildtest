@@ -16,6 +16,6 @@ target_include_directories(main PRIVATE
 )
 
 target_link_libraries(main 
-    ${PROJECT_ROOT}/tar/liba.a
-    ${PROJECT_ROOT}/tar/libb.a
+    ${PROJECT_ROOT}/libs/liba.a
+    ${PROJECT_ROOT}/libs/libb.a
 )

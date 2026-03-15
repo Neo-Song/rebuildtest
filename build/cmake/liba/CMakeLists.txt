@@ -9,7 +9,7 @@ set(LIBA_SOURCES
 add_library(liba STATIC ${LIBA_SOURCES})
 set_target_properties(liba PROPERTIES
     OUTPUT_NAME "a"
-    ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_ROOT}/tar
+    ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_ROOT}/libs
 )
 
 target_include_directories(liba PUBLIC

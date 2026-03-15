@@ -9,7 +9,7 @@ set(LIBB_SOURCES
 add_library(libb STATIC ${LIBB_SOURCES})
 set_target_properties(libb PROPERTIES
     OUTPUT_NAME "b"
-    ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_ROOT}/tar
+    ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_ROOT}/libs
 )
 
 target_include_directories(libb PUBLIC
